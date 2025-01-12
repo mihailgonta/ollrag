@@ -1,5 +1,7 @@
+import os
 import uuid
 import chromadb
+import configparser
 from typing import List
 
 from langchain_ollama import OllamaEmbeddings
@@ -11,8 +13,19 @@ from .chunking.cluster_semantic_chunker import ClusterSemanticChunker
 class OllamaDb:
     def __init__(self, embedding_model: str):
         self.embeddings = OllamaEmbeddings(model=embedding_model)
-        self.chroma_client = chromadb.PersistentClient("data/chroma")
+        self.chroma_client = self.__get_chroma_client()
+        self.config = configparser.ConfigParser()
+    
+    
+    def __get_chroma_client(self):
+        chroma_path = self.config['CHROMA_PATH']
         
+        if not os.path.exists(chroma_path):
+            os.mkdir("data")
+        
+        return chromadb.PersistentClient(chroma_path)
+            
+
     def get_chroma_collection(self, name: str):
         try:
             collection = self.chroma_client.get_collection(name)
