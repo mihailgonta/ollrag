@@ -13,17 +13,19 @@ from .chunking.cluster_semantic_chunker import ClusterSemanticChunker
 class OllamaDb:
     def __init__(self, embedding_model: str):
         self.embeddings = OllamaEmbeddings(model=embedding_model)
-        self.chroma_client = self.__get_chroma_client()
         self.config = configparser.ConfigParser()
+        self.chroma_client = self.__get_chroma_client()
     
     
     def __get_chroma_client(self):
-        chroma_path = self.config['CHROMA_PATH']
-        
-        if not os.path.exists(chroma_path):
-            os.mkdir("data")
-        
-        return chromadb.PersistentClient(chroma_path)
+        try:
+            self.config.read('config.ini')
+            chroma_path = self.config['chroma']['path']
+            print(f"ChromaDB path: {chroma_path}")
+            
+            return chromadb.PersistentClient(chroma_path)
+        except Exception as e:
+            raise ValueError(f"Couldn't connect to ChromaDB. Error: {str(e)}") from e
             
 
     def get_chroma_collection(self, name: str):
