@@ -3,7 +3,7 @@ import chromadb
 import streamlit as st
 from scripts.ollama_data import OllamaDb
 
-client = chromadb.PersistentClient(path="../data/chroma")
+client = chromadb.PersistentClient(path=os.path.join("..", "data", "chroma"))
 
 def load_collections():
     collections = client.list_collections()

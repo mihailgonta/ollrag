@@ -43,7 +43,8 @@ class OllamaRag:
         self.n_chunks = n_chunks
         self.embeddings_model = OllamaEmbeddings(model=embeddings_model)
         self.ollama_model = ChatOllama(model=ollama_model, temperature=temperature, num_ctx=4096)
-        self.chroma_client = chromadb.PersistentClient(path="data/chroma")
+        chroma_path = os.path.join("..", "data", "chroma")
+        self.chroma_client = chromadb.PersistentClient(path=chroma_path)
         # device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.cross_encoder = CrossEncoder('BAAI/bge-reranker-v2-m3', device='cpu')
         # self.flag_reranker = LayerWiseFlagLLMReranker("BAAI/bge-reranker-v2-minicpm-layerwise")
@@ -120,7 +121,7 @@ class OllamaRag:
     
     
     def __query(self, embedded_queries) -> list[Document]:
-        collection = Chroma(collection_name=self.collection_name, persist_directory="data/chroma")
+        collection = Chroma(collection_name=self.collection_name, persist_directory=os.path.join("..", "data", "chroma"))
         
         results = []
         

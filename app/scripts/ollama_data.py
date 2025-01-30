@@ -19,11 +19,12 @@ class OllamaDb:
     
     def __get_chroma_client(self):
         try:
-            self.config.read('config.ini')
-            chroma_path = self.config['chroma']['path']
+            self.config.read('../config.ini')
+            # Use relative path from app directory
+            chroma_path = os.path.join("..", "data", "chroma")
             print(f"ChromaDB path: {chroma_path}")
             
-            return chromadb.PersistentClient(chroma_path)
+            return chromadb.PersistentClient(path=chroma_path)
         except Exception as e:
             raise ValueError(f"Couldn't connect to ChromaDB. Error: {str(e)}") from e
             
