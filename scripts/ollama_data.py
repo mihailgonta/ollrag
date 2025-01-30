@@ -57,8 +57,8 @@ class OllamaDb:
         return docs
             
 
-    def chunk_documents(self, documents: List[Document]):
-        text_splitter = ClusterSemanticChunker(self.embeddings.embed_documents)
+    def chunk_documents(self, documents: List[Document], max_chunks:int, min_chunks:int):
+        text_splitter = ClusterSemanticChunker(self.embeddings.embed_documents, max_chunk_size=max_chunks, min_chunk_size=min_chunks)
         chunks = text_splitter.split_documents(documents)
         
         return chunks
@@ -66,7 +66,7 @@ class OllamaDb:
 
     def create_collection(self, chunks: List[Document], name: str):
         try:
-            collection = self.chroma_client.get_or_create_collection(name)
+            collection = self.chroma_client.get_or_create_collection(name, metadata={"embedding_model": self.embeddings.model})
             
             chunk_ids = [f"{uuid.uuid4()}" for i in range(len(chunks))]
             chunk_embeddings = self.embeddings.embed_documents([chunk.page_content for chunk in chunks])
