@@ -123,7 +123,7 @@ def display_chat_history(chat_history_key):
 
 def load_collections():
     """Refresh available Chroma collections"""
-    client = chromadb.PersistentClient(path="data/chroma")
+    client = chromadb.PersistentClient(path="../data/chroma")
     st.session_state.collections = client.list_collections()
 
 
