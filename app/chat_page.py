@@ -45,23 +45,32 @@ def ollama_inference(prompt, llm_name, collection, temperature, conversation_key
         with st.chat_message("question", avatar="🧑‍🚀"):
             st.write(prompt)
 
-        # Initialize Ollama
-        ollama_rag = OllamaRag(
-            embeddings_model='nomic-embed-text',
-            ollama_model=llm_name,
-            temperature=temperature,
-            collection_name=collection,
-            n_chunks=10
-        )
         
-        # Get response
-        trace_id, top_docs, response = ollama_rag.stream_call(
-            query=prompt, 
-            user_id=st.session_state["user_id"],
-            augment_query=False, 
-            rerank=True, 
-            top_k=3,
-        )
+        if st.session_state.rag_on:
+            # Initialize Ollama
+            ollama_rag = OllamaRag(
+                embeddings_model='nomic-embed-text',
+                ollama_model=llm_name,
+                temperature=temperature,
+                collection_name=collection,
+                n_chunks=10
+            )
+            
+            # Get response
+            trace_id, top_docs, response = ollama_rag.stream_call(
+                query=prompt, 
+                user_id=st.session_state["user_id"],
+                augment_query=False, 
+                rerank=False, 
+                top_k=3,
+            )
+        else:
+            trace_id, response = OllamaRag.ollama_inference(
+                query=prompt,
+                user_id=st.session_state["user_id"],
+                model=llm_name,
+                temperature=temperature
+            )
         
         # Display the new response
         with st.chat_message("response", avatar="🤖"):
@@ -171,8 +180,8 @@ prompt = st.chat_input(f"Ask '{llm_name}' a question ...")
 
 ollama_inference(prompt, llm_name, collection, temperature, conversation_key)
 
-if st.session_state[conversation_key]:
-    clear_conversation = st.sidebar.button("Clear chat")
-    if clear_conversation:
-        st.session_state[conversation_key] = []
-        st.rerun()
+# if st.session_state[conversation_key]:
+#     clear_conversation = st.sidebar.button("Clear chat")
+#     if clear_conversation:
+#         st.session_state[conversation_key] = []
+#         st.rerun()

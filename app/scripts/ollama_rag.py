@@ -26,12 +26,10 @@ from huggingface_hub import login
 
 from dotenv import load_dotenv, find_dotenv
 
-_ = load_dotenv(find_dotenv())
-
 
 class OllamaRag:
     def __init__(self, embeddings_model: str, ollama_model: str, temperature: float, collection_name: str, n_chunks: int = 5):
-        load_dotenv(find_dotenv()) # read local .env file
+        _ = load_dotenv(find_dotenv())
         
         openai.api_key = os.environ['OPENAI_API_KEY']
         
@@ -45,13 +43,11 @@ class OllamaRag:
         self.ollama_model = ChatOllama(model=ollama_model, temperature=temperature, num_ctx=4096)
         chroma_path = os.path.join("..", "data", "chroma")
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
-        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.cross_encoder = CrossEncoder('BAAI/bge-reranker-v2-m3', device='cpu')
+        # self.cross_encoder = CrossEncoder('BAAI/bge-reranker-v2-m3', device='cpu')
         # self.flag_reranker = LayerWiseFlagLLMReranker("BAAI/bge-reranker-v2-minicpm-layerwise")
-        # self.flag_reranker.model.to(device)
         
     
-    def __get_chat_prompt(self, context: str, query: str):
+    def __get_chat_prompt(self):
         HUMAN_MESSAGE_TEMPLATE = """
         You are an agent who provide answers strictly based on the provided context below:
         {context}
@@ -65,18 +61,7 @@ class OllamaRag:
         Do not add information or make assumptions beyond the given context.\n
         """
         
-        # human_message_template = HumanMessagePromptTemplate.from_template(HUMAN_MESSAGE_TEMPLATE)
-        
-        # chat_prompt = ChatPromptTemplate.from_messages([
-        #     SystemMessage(content=NEW_PROMPT),
-        #     human_message_template
-        # ])
-        
-        chat_prompt = ChatPromptTemplate.from_template(HUMAN_MESSAGE_TEMPLATE)
-        
-        prompt = chat_prompt.format(context=context, question=query)
-        
-        return chat_prompt
+        return ChatPromptTemplate.from_template(HUMAN_MESSAGE_TEMPLATE)
 
     
     def __augment_multiple_query(self, query):
@@ -100,20 +85,6 @@ class OllamaRag:
         questions = response.split("\n")
         
         return questions
-    
-    
-    def __query_chroma(self, embedded_queries):
-        chroma_collection = self.chroma_client.get_collection(name=self.collection_name)
-        results = chroma_collection.query(query_embeddings=embedded_queries, n_results=self.n_chunks, include=['documents'])
-        
-        retrieved_documents = results['documents']
-        
-        unique_documents = set()
-        for documents in retrieved_documents:
-            for document in documents:
-                unique_documents.add(document)
-        
-        return list(unique_documents)
     
     
     def __remove_duplicates(self, documents: list[Document]):
@@ -180,7 +151,7 @@ class OllamaRag:
         
         context = self.__build_context(documents)
         
-        prompt = self.__get_chat_prompt(context=context, query=query)
+        prompt = self.__get_chat_prompt()
         
         return prompt, context, documents
 
@@ -195,29 +166,28 @@ class OllamaRag:
         
         chain = prompt | self.ollama_model
         
-        response = chain.invoke(
-            {
-                "question": query, 
-                "context": context
-            },
-            config={
-                "callbacks": [langfuse_handler],
-                "metadata": {
-                    "user_id": langfuse_handler.user_id,
-                    "query_type": "rag",
-                    "augmented": augment_query,
-                    "reranked": rerank,
-                    "top_k": top_k
-                }
+        config = {
+            "callbacks": [langfuse_handler],
+            "metadata": {
+            "user_id": langfuse_handler.user_id,
+            "query_type": "rag",
+            "augmented": augment_query,
+            "reranked": rerank,
+            "top_k": top_k
             }
-        ).content
+        }
+        
+        response = chain.invoke({"question": query, "context": context}, config=config).content
         
         trace_id = langfuse_context.get_current_trace_id()
         
         return trace_id, top_docs, response
 
+
     @observe()
-    def stream_call(self, query: str, user_id: str = None, augment_query: bool = True, rerank: bool = True, top_k: int = 3):
+    def stream_call(self, query: str, user_id: str = None, 
+                    augment_query: bool = True, rerank: bool = True, 
+                    top_k: int = 3):
         langfuse_handler = langfuse_context.get_current_langchain_handler()
         
         if user_id:
@@ -227,18 +197,19 @@ class OllamaRag:
         
         chain = prompt | self.ollama_model
         
+        config = {
+            "callbacks": [langfuse_handler],
+            "metadata": {
+                "user_id": langfuse_handler.user_id,
+                "query_type": "rag",
+                "augmented": augment_query,
+                "reranked": rerank,
+                "top_k": top_k
+            }
+        }
+        
         def stream_response():
-            for chunk in chain.stream({"question": query, "context": context}, 
-                                      config={
-                                        "callbacks": [langfuse_handler],
-                                        "metadata": {
-                                            "user_id": langfuse_handler.user_id,
-                                            "query_type": "rag",
-                                            "augmented": augment_query,
-                                            "reranked": rerank,
-                                            "top_k": top_k
-                                        }
-                                    }):
+            for chunk in chain.stream({"question": query, "context": context}, config=config):
                 yield chunk.content
 
         trace_id = langfuse_context.get_current_trace_id()
@@ -246,4 +217,30 @@ class OllamaRag:
         return trace_id, top_docs, stream_response()
 
     
+    @observe()
+    def ollama_inference(query: str, user_id: str = None, model: str = None, temperature: float = 0.8):
+        langfuse_handler = langfuse_context.get_current_langchain_handler()
+        
+        if model:
+            llm = ChatOllama(model=model, temperature=temperature, num_ctx=4096)
+        
+        if user_id:
+            langfuse_handler.user_id = user_id
+        
+        config = {
+            "callbacks": [langfuse_handler],
+            "metadata": {
+                "user_id": langfuse_handler.user_id,
+                "query_type": "simple inference",
+            }
+        }
+        
+        def stream_response():
+            for chunk in llm.stream(query, config=config):
+                yield chunk.content
+
+        trace_id = langfuse_context.get_current_trace_id()
+        
+        return trace_id, stream_response()
+        
     
