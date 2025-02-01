@@ -1,3 +1,9 @@
+<div align="center">
+  
+  <a href="">![LangChain](https://img.shields.io/badge/langchain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)</a>
+  
+</div>
+
 # OllaRag
 
 A powerful and user-friendly RAG (Retrieval-Augmented Generation) application that combines the capabilities of Ollama with an intuitive interface for document management and contextual chat interactions.
