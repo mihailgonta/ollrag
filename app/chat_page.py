@@ -3,7 +3,10 @@ import uuid
 import ollama
 import chromadb
 import streamlit as st
-from scripts.ollama_rag import OllamaRag
+from scripts.ollama_rag import OllamaAssistant, RAGConfig
+from langchain_ollama.chat_models import ChatOllama
+from langchain_ollama.embeddings import OllamaEmbeddings
+
 from langfuse import Langfuse
 from dotenv import load_dotenv, find_dotenv
 
@@ -21,13 +24,13 @@ if "user_id" not in st.session_state:
 if "collections" not in st.session_state:
     st.session_state.collections = []
     
-if "rag_on" not in st.session_state:
-    st.session_state.rag_on = True
+if "use_rag" not in st.session_state:
+    st.session_state.use_rag = True
 
 if "feedbacks" not in st.session_state:
     st.session_state.feedbacks = {}
 
-def ollama_inference(prompt, llm_name, collection, temperature, conversation_key):
+def ollama_inference(prompt, collection, conversation_key):
     # Initialize conversation history if not exists
     if conversation_key not in st.session_state:
         st.session_state[conversation_key] = []
@@ -46,41 +49,30 @@ def ollama_inference(prompt, llm_name, collection, temperature, conversation_key
             st.write(prompt)
 
         
-        if st.session_state.rag_on:
-            # Initialize Ollama
-            ollama_rag = OllamaRag(
-                embeddings_model='nomic-embed-text',
-                ollama_model=llm_name,
-                temperature=temperature,
-                collection_name=collection,
-                n_chunks=10
+        ollama_assistant = OllamaAssistant(
+            embeddings=OllamaEmbeddings(model='nomic-embed-text'),
+            chat_model=ChatOllama(model=llm_name, temperature=temperature),
+            collection_name=collection,
+            rag_config=RAGConfig(
+                n_chunks=5
             )
-            
-            # Get response
-            trace_id, top_docs, response = ollama_rag.stream_call(
-                query=prompt, 
-                user_id=st.session_state["user_id"],
-                augment_query=False, 
-                rerank=False, 
-                top_k=3,
-            )
-        else:
-            trace_id, response = OllamaRag.ollama_inference(
-                query=prompt,
-                user_id=st.session_state["user_id"],
-                model=llm_name,
-                temperature=temperature
-            )
+        )
+        
+        response = ollama_assistant.stream_query(
+            query=prompt, 
+            user_id=st.session_state["user_id"],
+            use_rag=st.session_state.use_rag
+        )
         
         # Display the new response
         with st.chat_message("response", avatar="🤖"):
-            ai_text = st.write_stream(response)
+            ai_text = st.write_stream(response.content)
             
         # Store the response in chat history
         st.session_state[conversation_key].append({
             "content": ai_text,
             "role": "assistant",
-            "trace_id": trace_id,
+            "trace_id": response.trace_id,
             "feedback_submitted": False,
             "feedback_value": None
         })
@@ -143,13 +135,13 @@ def get_model_settings():
         selected_model = st.selectbox("Model", [model.model for model in ollama_models.models])
 
     with rag_toggle_col:
-        st.session_state.rag_on = st.toggle("RAG", value=st.session_state.rag_on)
+        st.session_state.use_rag = st.toggle("RAG", value=st.session_state.use_rag)
 
     with collection_col:
         collection_name = st.selectbox(
             "Collection", 
             [col for col in st.session_state.collections], 
-            disabled=not st.session_state.rag_on
+            disabled=not st.session_state.use_rag
         )
 
     with st.expander("Temperature"):
@@ -178,10 +170,4 @@ conversation_key = f"model_{llm_name}"
 
 prompt = st.chat_input(f"Ask '{llm_name}' a question ...")
 
-ollama_inference(prompt, llm_name, collection, temperature, conversation_key)
-
-# if st.session_state[conversation_key]:
-#     clear_conversation = st.sidebar.button("Clear chat")
-#     if clear_conversation:
-#         st.session_state[conversation_key] = []
-#         st.rerun()
+ollama_inference(prompt, collection, conversation_key)
