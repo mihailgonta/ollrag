@@ -1,3 +1,11 @@
+<div align="center">
+  
+  <a href="">![Ollama](https://img.shields.io/badge/Ollama-000000.svg?style=for-the-badge&logo=Ollama&logoColor=white)</a>
+  <a href="">![LangChain](https://img.shields.io/badge/langchain-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)</a>
+  <a href="">![Streamlit](https://img.shields.io/badge/Streamlit-%23FE4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)</a>
+  
+</div>
+
 # OllaRag
 
 A powerful and user-friendly RAG (Retrieval-Augmented Generation) application that combines the capabilities of Ollama with an intuitive interface for document management and contextual chat interactions.
