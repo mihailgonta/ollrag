@@ -103,6 +103,7 @@ def display_chat_history(chat_history_key):
                 st.markdown(message["content"], unsafe_allow_html=True)
             
                 feedback_key = f"feedback_{message.get('trace_id', '')}_{idx}_{chat_history_key}"
+                comment_key = f"comment_{message.get('trace_id', '')}_{idx}_{chat_history_key}"
                 
                 if not message.get("feedback_submitted", False):
                     feedback = st.feedback(
@@ -111,15 +112,31 @@ def display_chat_history(chat_history_key):
                     )
                     
                     if feedback is not None and message.get("trace_id"):
-                        message["feedback_submitted"] = True
-                        message["feedback_value"] = feedback
-                        
                         if feedback == 1:
-                            send_feedback(trace_id=message["trace_id"], name="like", value=feedback,)
+                            message["feedback_submitted"] = True
+                            message["feedback_value"] = feedback
+                            send_feedback(trace_id=message["trace_id"], name="like", value=feedback)
                         else:
-                            comment = st.text_area(label="comment", label_visibility="hidden", placeholder="Please tell us more")
-                            if st.button("Send"):
-                                send_feedback(trace_id=message["trace_id"], name="like", value=feedback, comment=comment)
+                            # Only show comment box when dislike is selected
+                            comment = st.text_area(
+                                label="What could be improved?",
+                                key=comment_key,
+                                placeholder="Please tell us more about why this response wasn't helpful"
+                            )
+                            
+                            if st.button("Submit Feedback", key=f"submit_{feedback_key}"):
+                                if comment:  # Only submit if there's a comment
+                                    message["feedback_submitted"] = True
+                                    message["feedback_value"] = feedback
+                                    send_feedback(
+                                        trace_id=message["trace_id"],
+                                        name="like",
+                                        value=feedback,
+                                        comment=comment
+                                    )
+                                    st.success("Thank you for your feedback!")
+                                else:
+                                    st.warning("Please provide a comment before submitting")
 
 
 def load_collections():
