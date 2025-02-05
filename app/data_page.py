@@ -108,8 +108,8 @@ def display_collection(collection_name, idx):
             title_col, edit_button_col = st.columns([2, 1], vertical_alignment="center")
             with title_col:
                 st.markdown(f"""
-                    <p style='font-size: 1.5rem; w
-                    hite-space: nowrap; 
+                    <p style='font-size: 1.5rem; 
+                    white-space: nowrap; 
                     overflow: hidden; 
                     text-overflow: ellipsis;' 
                     title='{collection_name}'>
