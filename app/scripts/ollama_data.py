@@ -47,13 +47,13 @@ class OllamaDb:
                 loader = PyMuPDFLoader(file_path)
                 multiple_documents = loader.load()
                 page_content = " ".join(doc.page_content for doc in multiple_documents)
-                document = Document(page_content=str(page_content), metadata={"source": file_path})
+                document = [Document(page_content=str(page_content), metadata={"source": file_path})]
             elif file_path.endswith('.txt') or file_path.endswith('.md'):
-                document = TextLoader(file_path).load()
+                document = TextLoader(file_path, encoding='utf-8').load()
             else:
                 print(f"Skipping unsupported file type: {file_path}")
                 continue
-            docs.append(document)
+            docs.extend(document)
             
         return docs
             
