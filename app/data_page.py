@@ -1,155 +1,131 @@
 import os
+import time
 import chromadb
 import streamlit as st
+import pandas as pd
 from scripts.ollama_data import OllamaDb
+from pathlib import Path
 
 client = chromadb.PersistentClient(path=os.path.join("..", "data", "chroma"))
 
+
 def load_collections():
-    collections = client.list_collections()
-    st.session_state.collections = collections 
+    st.session_state.collections = []
+    collection_names = list(client.list_collections())
+
+    for collection_name in collection_names:
+        collection = client.get_collection(name=collection_name)
+        st.session_state.collections.append(collection)
 
 
-def create_collection(collection_name: str, max_chunks:int = 400, min_chunks: int = 50):
-    ollama_db = OllamaDb('nomic-embed-text')
-    
-    file_paths = [
-        os.path.join(folder_path, file_name)
-        for key, value in st.session_state.items()
-        if key not in ["temp_folder_paths"] and value and "_" in key 
-        for folder_path, file_name in [key.rsplit("_", 1)]
-    ]
-    
-    documents = ollama_db.load_documents(file_paths)
-    chunks = ollama_db.chunk_documents(documents, max_chunks=max_chunks, min_chunks=min_chunks)
-    ollama_db.create_collection(chunks, collection_name)
-    
-    load_collections()
+def display_collections_table_advanced():
+    # Create checkbox state if it doesn't exist
+    if "selected_collections" not in st.session_state:
+        st.session_state.selected_collections = set()
 
+    # Prepare data
+    data = []
+    for collection in st.session_state.collections:
+        metadata = collection.metadata or {}
+        creation_date = "unknown"
+
+        if metadata and "date" in metadata:
+            date = metadata.get("date")
+            creation_date = date.strftime("%d.%m.%y") if date else "unknown"
+
+        data.append(
+            {
+                "Select": False,  # Checkbox column
+                "Name": collection.name,
+                "Count": collection.count(),
+                "Created": creation_date,
+            }
+        )
+
+    if not data:
+        st.info("No collections found")
+        return
+
+    df = pd.DataFrame(data)
+
+    # Add filters
+    col1, col2 = st.columns(2)
+    with col1:
+        search = st.text_input("Search collections", "")
+    with col2:
+        sort_by = st.selectbox("Sort by", ["Name", "Count", "Created"])
+
+    # Apply filters
+    if search:
+        df = df[df["Name"].str.contains(search, case=False)]
+
+    # Sort
+    if sort_by in ["Name", "Count", "Created"]:
+        df = df.sort_values(by=sort_by)
+
+    # Display table with checkboxes
+    edited_df = st.data_editor(
+        df,
+        column_config={
+            "Select": st.column_config.CheckboxColumn(
+                "Select", help="Select collection", default=False
+            ),
+            "Name": st.column_config.TextColumn(
+                "Collection Name", help="Name of the collection"
+            ),
+            "Count": st.column_config.NumberColumn(
+                "Documents", help="Number of documents in collection"
+            ),
+            "Created": st.column_config.TextColumn(
+                "Creation Date", help="When the collection was created"
+            ),
+        },
+        hide_index=True,
+        use_container_width=True,
+        disabled=["Name", "Count", "Created"],
+    )
+
+    # Update selected collections based on checkboxes
+    selected_collections = edited_df[edited_df["Select"]]["Name"].tolist()
+    st.session_state.selected_collections = set(selected_collections)
+
+    # Display action buttons for selected collections
+    if st.session_state.selected_collections:
+        st.write(f"Selected: {len(st.session_state.selected_collections)} collections")
+
+        col1, col2 = st.columns([4, 10])
+        with col1:
+            if st.button("🗑️ Delete", use_container_width=True):
+                st.session_state.show_delete_confirm = True
+
+        # Show delete confirmation
+        if st.session_state.get("show_delete_confirm", False):
+            with st.container():
+                st.warning(
+                    f"Are you sure you want to delete {len(st.session_state.selected_collections)} collections?"
+                )
+                conf_col1, conf_col2 = st.columns(2)
+                with conf_col1:
+                    if st.button("Yes, delete"):
+                        for collection_name in st.session_state.selected_collections:
+                            try:
+                                client.delete_collection(collection_name)
+                            except Exception as e:
+                                st.error(f"Error deleting {collection_name}: {str(e)}")
+                        st.success("Selected collections deleted successfully")
+                        st.session_state.selected_collections = set()
+                        st.session_state.show_delete_confirm = False
+                        load_collections()
+                        st.rerun()
+                with conf_col2:
+                    if st.button("Cancel"):
+                        st.session_state.show_delete_confirm = False
+                        st.rerun()
+
+
+st.title("Collections Manager")
 
 if "collections" not in st.session_state:
-    st.session_state.collections = []
     load_collections()
 
-if "temp_folder_paths" not in st.session_state:
-    st.session_state.temp_folder_paths = []
-if "create_collection_success" not in st.session_state:
-    st.session_state.create_collection_success = False
-
-@st.dialog("Add a new collection", width="large")
-def add_collection(): 
-    folder_path = ""
-    with st.container(border=True):
-        input_col, button_col = st.columns([4, 1], vertical_alignment="bottom")
-        
-        with input_col:
-            folder_path = st.text_input(label="Directory Path", placeholder="path/to/your/files")
-        
-        with button_col:
-            if st.button("Add folder", icon="📂"):
-                if os.path.exists(folder_path):
-                    if folder_path not in st.session_state.temp_folder_paths:
-                        st.session_state.temp_folder_paths.append(folder_path)
-                    else:
-                        st.toast("Folder already added.")
-                else:
-                    st.toast("Path not found.")
-    
-    with st.container(border=False):
-        for folder_path in st.session_state.temp_folder_paths:
-            with st.expander(folder_path):
-                files_list = [f for f in os.listdir(folder_path) if f.endswith(('.pdf', '.txt', '.md'))]
-                
-                if not files_list:
-                    st.write("No PDF or TXT files found in this folder.")
-                else:
-                    with st.container(border=True, height=400):
-                        all_selected = st.checkbox("🗃️ Include all", key=f"{folder_path}_all")
-                        
-                        for file_name in files_list:
-                            file_key = f"{folder_path}_{file_name}"
-                            st.checkbox(f"📄 {file_name}", value=all_selected, key=file_key)
-                        
-    with st.container(border=True):
-        collection_name_col, create_button_col = st.columns([7, 1], vertical_alignment="bottom")
-
-    with collection_name_col:
-        new_collection_name = st.text_input(label="Collection name", placeholder="myCollection")
-
-    with create_button_col:
-        if st.button("Create", type="primary"):
-            if new_collection_name not in st.session_state.collections:
-                create_collection(new_collection_name)
-                st.rerun()
-            else:
-                st.toast("Collection already exist.")
-
-if not st.session_state.get("add_collection_open", False):
-    st.session_state.temp_folder_paths = []
-
-
-st.markdown("<h1 style='text-align: center; color: grey; padding: 2rem 0rem 4rem;'>Ollama RAG 🦙</h1>", unsafe_allow_html=True)
-
-
-@st.dialog("Delete collection")
-def delete_collection(idx, collection_name):
-    st.warning(f"Are you sure?", icon="⚠️")
-    
-    if st.button("Yes"):
-        client.delete_collection(collection_name)
-        st.session_state['collections'].pop(idx)
-        st.rerun()
-
-
-def display_collection(collection_name, idx):
-    tile = col.container(border=True)
-    with tile:
-        with st.container(border=False):
-            title_col, edit_button_col = st.columns([2, 1], vertical_alignment="center")
-            with title_col:
-                st.markdown(f"""
-                    <p style='font-size: 1.5rem; 
-                    white-space: nowrap; 
-                    overflow: hidden; 
-                    text-overflow: ellipsis;' 
-                    title='{collection_name}'>
-                        {collection_name}
-                    </p>
-                """,unsafe_allow_html=True)
-            
-            with edit_button_col:
-                with st.popover(label="⋮", use_container_width=True):
-                    if st.button("Delete", icon="🗑️", key=f"{collection_name}_delete_button"):
-                        delete_collection(idx, collection_name)
-                    
-                    if st.button("Update", icon="📝", key=f"{collection_name}_edit_button"):
-                        pass
-        
-            st.write("<hr style='margin: 0.6rem 0rem'>", unsafe_allow_html=True)
-        
-            with st.container(border=False):
-                date_col_1, date_col_2 = st.columns([2, 1], vertical_alignment="center")
-                
-                with date_col_1:
-                    st.markdown(f"<p style='font-size: 1rem; opacity: 0.5;'>Date modified:</p>", unsafe_allow_html=True)
-                with date_col_2:    
-                    st.markdown(f"<p style='font-size: 1rem; opacity: 0.5;'>12.12.24</p>", unsafe_allow_html=True)
-
-
-with st.container():
-    with st.container(border=True):
-        title_col, button_col = st.columns([9, 1], vertical_alignment="center")
-        
-        with title_col:
-            st.markdown(f"<p style='font-size: 1.5rem'>Collections</p>", unsafe_allow_html=True)
-        with button_col:
-            if st.button("Add"):
-                add_collection()
-                
-    columns_per_row = 3
-    for idx, collection_name in enumerate(st.session_state.collections):
-        if idx % columns_per_row == 0:
-            row = st.columns(columns_per_row)  # Start a new row
-        col = row[idx % columns_per_row]
-        with col:
-            display_collection(collection_name, idx)
+display_collections_table_advanced()

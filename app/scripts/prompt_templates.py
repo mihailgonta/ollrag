@@ -5,11 +5,20 @@ You are an agent who provide answers strictly based on the provided context belo
 Answer the following question based on the above context:{question}
 
 Your responses should be concise, straight to the point, avoid filling words.
-If possible include price. If you find a list that responds to the question, include it in response.
-Be careful when identifying plans, e.g commercial plans and noncommercial plans.
 If the question cannot be answered using the given context, respond with: 'I don't know.'
 If no context is provided, also respond with: 'I don't know.'
 Do not add information or make assumptions beyond the given context.
+"""
+
+LLM_RERANK = """
+You are a document reranking system. Your task is to evaluate how relevant each document is to the given query.
+Assign a relevance score from 0-10 for each document, where 10 means highly relevant and 0 means not relevant at all.
+
+query: {query}
+
+document: {document}
+
+Relevance score (0-10):
 """
 
 
