@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain.schema.runnable import RunnablePassthrough
 
 from langfuse.decorators import observe, langfuse_context
 
@@ -51,7 +52,9 @@ class OllamaAssistant:
         if embeddings and collection_name:
             self.chroma_path = os.path.join("..", "data", "chroma")
             self.collection = Chroma(
-                collection_name=collection_name, persist_directory=self.chroma_path
+                collection_name=collection_name,
+                persist_directory=self.chroma_path,
+                embedding_function=embeddings,
             )
 
     def __get_chat_prompt(self, use_rag: bool):
@@ -149,17 +152,30 @@ class OllamaAssistant:
 
         documents = []
 
-        chain_input, documents = self.__prepare_chain_input(query, use_rag)
+        # chain_input, documents = self.__prepare_chain_input(query, use_rag)
 
-        prompt = self.__get_chat_prompt(use_rag)
-        chain = prompt | self.chat_model
+        retriever = self.collection.as_retriever(
+            search_kwargs={"k": self.rag_config.n_chunks}
+        )
+
+        template = prompt_templates.RAG if use_rag else prompt_templates.DIRECT
+
+        prompt = ChatPromptTemplate.from_template(template)
+
+        # prompt = self.__get_chat_prompt(use_rag)
+
+        chain = (
+            {"context": retriever, "query": RunnablePassthrough()}
+            | prompt
+            | self.chat_model
+        )
 
         method = getattr(chain, chain_method)
 
         if chain_method == "stream":
-            content = (chunk.content for chunk in method(chain_input, config=config))
+            content = (chunk.content for chunk in method(query, config=config))
         else:
-            content = method(chain_input, config=config).content
+            content = method(query, config=config).content
 
         return QueryResult(
             trace_id=langfuse_context.get_current_trace_id(),

@@ -197,4 +197,6 @@ data/docs
 
 *.ipynb
 !spec/*.ipynb
-
+*.db
+*.db-shm
+*.db-wal

@@ -2,7 +2,7 @@ RAG = """
 You are an agent who provide answers strictly based on the provided context below:
 {context}
 --
-Answer the following question based on the above context:{question}
+Answer the following question based on the above context:{query}
 
 Your responses should be concise, straight to the point, avoid filling words.
 If the question cannot be answered using the given context, respond with: 'I don't know.'
@@ -24,7 +24,7 @@ Relevance score (0-10):
 
 DIRECT = """
 You are a helpful AI assistant. Please answer the following question:
-{question}
+{query}
 """
 
 
@@ -37,5 +37,5 @@ Suggest only short questions without compound sentences. Suggest a variety of qu
 Make sure they are complete questions, and that they are related to the original question.
 Output one question per line. Do not number the questions.
 
-User question: {question}
+User question: {query}
 """
